@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spotify – Jouer le refrain (Netlify)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    button { padding: .8rem 1rem; margin: .5rem 0; font-size: 1rem; cursor: pointer; }
+    .track { margin: 1rem 0; }
+    #status { margin-top: 1rem; color: green; }
+    #error { margin-top: .5rem; color: red; white-space: pre-wrap; }
+    .row { display:flex; gap:.5rem; flex-wrap:wrap; }
+    label { margin-left: .5rem; }
+  </style>
+</head>
+<body>
+  <h1>Jouer le refrain (Netlify)</h1>
+  <p>1) Clique <strong>Connecter Spotify</strong> puis autorise. 2) Clique <strong>Initialiser le lecteur web</strong>, puis <strong>Transférer</strong>. 3) Choisis un titre et, si besoin, active <strong>Répéter le refrain</strong>.</p>
+
+  <div class="row">
+    <button id="btnAuth">Connecter Spotify</button>
+    <button id="btnInit">Initialiser le lecteur web</button>
+    <button id="btnTransfer">Transférer vers le navigateur</button>
+    <label><input type="checkbox" id="chkRepeat" /> Répéter le refrain</label>
+    <button id="btnStopLoop">Arrêter la répétition</button>
+  </div>
+  <div id="status"></div>
+  <div id="error"></div>
+
+  <!-- Exemples de test -->
+  <div class="track">
+    <strong>Huey Lewis & The News — The Power of Love</strong>
+    <button class="play-refrain"
+      data-uri="spotify:track:0aU29D6g6dR1s6QdWQKcYb"
+      data-ms="60000"
+      data-end-ms="90000">Jouer (1:00 → 1:30)</button>
+  </div>
+  <div class="track">
+    <strong>Bee Gees — Stayin’ Alive</strong>
+    <button class="play-refrain"
+      data-uri="spotify:track:0e3FtJfGJY5JrZ3HcTnK2P"
+      data-ms="45000"
+      data-end-ms="72000">Jouer (0:45 → 1:12)</button>
+  </div>
+
+  <script src="https://sdk.scdn.co/spotify-player.js"></script>
+  <script>
+    // ========= CONFIG =========
+    const CLIENT_ID = '1d3b46cc1be34f21a8922d6181460d45';
+    const REDIRECT_URI = 'https://trouverlachanson.netlify.app/callback';
+    const SCOPES = ['user-modify-playback-state','streaming'];
+
+    // ========= STATE =========
+    let accessToken = null, deviceId = null, player = null;
+    let loopTimer = null, loopActive = false;
+
+    // ========= PKCE =========
+    async function pkceChallengeFromVerifier(v){
+      const data = new TextEncoder().encode(v);
+      const digest = await crypto.subtle.digest('SHA-256', data);
+      return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    function randomString(len=64){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';let o='';for(let i=0;i<len;i++)o+=c[Math.floor(Math.random()*c.length)];return o;}
+
+    document.getElementById('btnAuth').onclick = async () => {
+      const verifier = randomString(64);
+      const challenge = await pkceChallengeFromVerifier(verifier);
+      sessionStorage.setItem('verifier', verifier);
+      const params = new URLSearchParams({
+        client_id: CLIENT_ID,
+        response_type: 'code',
+        redirect_uri: REDIRECT_URI,
+        code_challenge_method: 'S256',
+        code_challenge: challenge,
+        scope: SCOPES.join(' ')
+      });
+      location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+    };
+
+    (async function handleCallback(){
+      if (location.pathname.endsWith('/callback')) {
+        const code = new URLSearchParams(location.search).get('code');
+        const verifier = sessionStorage.getItem('verifier');
+        if (!code || !verifier) return;
+        const body = new URLSearchParams({
+          client_id: CLIENT_ID,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: REDIRECT_URI,
+          code_verifier: verifier
+        });
+        const res = await fetch('https://accounts.spotify.com/api/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body
+        });
+        const json = await res.json();
+        accessToken = json.access_token;
+        document.getElementById('status').textContent = 'Connecté à Spotify.';
+        history.replaceState({}, '', '/');
+      }
+    })();
+
+    // ========= Web Playback SDK =========
+    document.getElementById('btnInit').onclick = () => {
+      if (!accessToken) { document.getElementById('error').textContent = 'Authentifie-toi d\'abord.'; return; }
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        player = new Spotify.Player({ name: 'Lecteur Web (Netlify)', getOAuthToken: cb => cb(accessToken), volume: 0.8 });
+        player.addListener('ready', ({ device_id }) => {
+          deviceId = device_id;
+          document.getElementById('status').textContent = 'Lecteur prêt.';
+        });
+        player.addListener('initialization_error', ({ message }) => document.getElementById('error').textContent = message);
+        player.addListener('authentication_error', ({ message }) => document.getElementById('error').textContent = message);
+        player.addListener('account_error', ({ message }) => document.getElementById('error').textContent = message);
+        player.connect();
+      };
+      if (!window.Spotify) document.getElementById('error').textContent = 'SDK en cours de chargement…';
+    };
+
+    // ========= Transfer playback =========
+    document.getElementById('btnTransfer').onclick = async () => {
+      if (!accessToken || !deviceId) { document.getElementById('error').textContent = 'Initialise d\'abord le lecteur web.'; return; }
+      const res = await fetch('https://api.spotify.com/v1/me/player', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_ids: [deviceId], play: false })
+      });
+      if (res.status === 204) document.getElementById('status').textContent = 'Lecture transférée vers le navigateur.';
+    };
+
+    // ========= Loop helpers =========
+    function stopLoop(){ loopActive=false; if(loopTimer){ clearTimeout(loopTimer); loopTimer=null; } document.getElementById('status').textContent='Répétition arrêtée.'; }
+    document.getElementById('btnStopLoop').onclick = stopLoop;
+
+    async function seekTo(ms){
+      await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${ms}&device_id=${deviceId}`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${accessToken}` }
+      });
+    }
+    function scheduleLoop(startMs, endMs){
+      if (!loopActive) return; const FUDGE=250; const duration=Math.max(300,(endMs-startMs)-FUDGE);
+      loopTimer = setTimeout(async ()=>{ if(!loopActive) return; await seekTo(startMs); scheduleLoop(startMs, endMs); }, duration);
+    }
+    async function playRefrainLoop(uri, startMs, endMs){
+      stopLoop();
+      const res = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+        method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uris: [uri], position_ms: startMs })
+      });
+      if (res.status !== 204) { document.getElementById('error').textContent = 'Erreur play: '+ await res.text(); return; }
+      loopActive = document.getElementById('chkRepeat').checked;
+      if (loopActive) { scheduleLoop(startMs, endMs); document.getElementById('status').textContent = 'Lecture + répétition activée.'; }
+      else { document.getElementById('status').textContent = 'Lecture du refrain.'; }
+    }
+
+    document.querySelectorAll('.play-refrain').forEach(btn => {
+      btn.addEventListener('click', () => {
+        playRefrainLoop(btn.dataset.uri, parseInt(btn.dataset.ms,10), parseInt(btn.dataset.endMs,10));
+      });
+    });
+  </script>
+</body>
+</html>
