@@ -51,9 +51,8 @@ label { margin-left: 1rem; }
     data-end-ms="72000">Jouer le refrain (0:45 → 1:12)</button>
 </div>
 
-<!-- IMPORTANT: Définir le callback global AVANT de charger le SDK -->
+<!-- Callback défini AVANT le SDK -->
 <script>
-  // Le SDK Spotify appelle cette fonction s'elle existe. On la définit d'avance
   window.onSpotifyWebPlaybackSDKReady = function(){
     window._sdkReady = true;
     console.log('SDK Spotify prêt');
@@ -64,7 +63,11 @@ label { margin-left: 1rem; }
 // ====== CONFIG ======
 const CLIENT_ID = '1d3b46cc1be34f21a8922d6181460d45';
 const REDIRECT_URI = 'https://octetsluc.github.io/trouverlachanson/';
-const SCOPES = ['user-modify-playback-state','streaming'];
+const SCOPES = [
+  'streaming',
+  'user-modify-playback-state',
+  'user-read-private'
+];
 
 // ====== STATE ======
 let accessToken = null, deviceId = null, player = null;
@@ -123,6 +126,8 @@ document.getElementById('btnAuth').onclick = async () => {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body
     });
     const json = await res.json();
+    console.log('Token scopes =', json.scope);
+    console.log('Token type =', json.token_type, 'expires_in =', json.expires_in);
     if (json.error) { document.getElementById('error').textContent = 'Token error: ' + JSON.stringify(json); return; }
     accessToken = json.access_token;
     document.getElementById('status').textContent = 'Connecté à Spotify.';
@@ -170,12 +175,10 @@ function initPlayer() {
 }
 
 document.getElementById('btnInit').onclick = () => {
-  // Si le SDK s'est déjà annoncé via onSpotifyWebPlaybackSDKReady
   if (window._sdkReady || (window.Spotify && typeof window.Spotify.Player === 'function')) {
     initPlayer();
     return;
   }
-  // Sinon, on attend le signal (déjà défini plus haut) et on init au moment où le SDK est prêt
   window.onSpotifyWebPlaybackSDKReady = function(){
     window._sdkReady = true;
     initPlayer();
