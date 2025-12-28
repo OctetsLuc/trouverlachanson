@@ -105,6 +105,11 @@ document.getElementById('btnAuth').onclick = async () => {
   });
   const url = 'https://accounts.spotify.com/authorize?' + params.toString();
   console.log('Authorize URL =', url);
+  
+  console.log('SCOPES array =', SCOPES);
+  console.log('Authorize URL =', url);
+  ``
+
   location.href = url;
 };
 
