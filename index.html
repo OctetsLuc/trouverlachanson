@@ -51,12 +51,18 @@ label { margin-left: 1rem; }
     data-end-ms="72000">Jouer le refrain (0:45 → 1:12)</button>
 </div>
 
-<!-- SDK Spotify (doit être chargé avant notre script) -->
+<!-- IMPORTANT: Définir le callback global AVANT de charger le SDK -->
+<script>
+  // Le SDK Spotify appelle cette fonction s'elle existe. On la définit d'avance
+  window.onSpotifyWebPlaybackSDKReady = function(){
+    window._sdkReady = true;
+    console.log('SDK Spotify prêt');
+  };
+</script>
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script>
 // ====== CONFIG ======
 const CLIENT_ID = '1d3b46cc1be34f21a8922d6181460d45';
-// Redirect URI sur la RACINE (tout en minuscules, slash final)
 const REDIRECT_URI = 'https://octetsluc.github.io/trouverlachanson/';
 const SCOPES = ['user-modify-playback-state','streaming'];
 
@@ -120,21 +126,59 @@ document.getElementById('btnAuth').onclick = async () => {
     if (json.error) { document.getElementById('error').textContent = 'Token error: ' + JSON.stringify(json); return; }
     accessToken = json.access_token;
     document.getElementById('status').textContent = 'Connecté à Spotify.';
-    // Nettoie l'URL (retire ?code=...)
     history.replaceState({}, '', '/trouverlachanson/');
   }
 })();
 
-// ====== Web Playback SDK ======
+// ====== Web Playback SDK : initialisation robuste ======
+function initPlayer() {
+  if (!accessToken) {
+    document.getElementById('error').textContent = "Authentifie-toi d'abord.";
+    return;
+  }
+  try {
+    if (window.Spotify && typeof window.Spotify.Player === 'function') {
+      player = new Spotify.Player({
+        name: 'Lecteur Web (GitHub Pages)',
+        getOAuthToken: cb => cb(accessToken),
+        volume: 0.8
+      });
+
+      player.addListener('ready', ({ device_id }) => {
+        deviceId = device_id;
+        document.getElementById('status').textContent = 'Lecteur prêt.';
+      });
+
+      player.addListener('initialization_error', ({ message }) => {
+        document.getElementById('error').textContent = 'Init error: ' + message;
+      });
+      player.addListener('authentication_error', ({ message }) => {
+        document.getElementById('error').textContent = 'Auth error: ' + message;
+      });
+      player.addListener('account_error', ({ message }) => {
+        document.getElementById('error').textContent = 'Account error: ' + message;
+      });
+
+      player.connect();
+    } else {
+      document.getElementById('error').textContent =
+        'SDK Spotify non chargé. Réessaie (Ctrl+F5) ou vérifie le script https://sdk.scdn.co/spotify-player.js.';
+    }
+  } catch (e) {
+    document.getElementById('error').textContent = 'Exception init: ' + (e && e.message ? e.message : e);
+  }
+}
+
 document.getElementById('btnInit').onclick = () => {
-  if (!accessToken) { document.getElementById('error').textContent = "Authentifie-toi d'abord."; return; }
-  window.onSpotifyWebPlaybackSDKReady = () => {
-    player = new Spotify.Player({ name: 'Lecteur Web (GitHub Pages)', getOAuthToken: cb => cb(accessToken), volume: 0.8 });
-    player.addListener('ready', ({ device_id }) => { deviceId = device_id; document.getElementById('status').textContent = 'Lecteur prêt.'; });
-    player.addListener('initialization_error', ({ message }) => document.getElementById('error').textContent = message);
-    player.addListener('authentication_error', ({ message }) => document.getElementById('error').textContent = message);
-    player.addListener('account_error', ({ message }) => document.getElementById('error').textContent = message);
-    player.connect();
+  // Si le SDK s'est déjà annoncé via onSpotifyWebPlaybackSDKReady
+  if (window._sdkReady || (window.Spotify && typeof window.Spotify.Player === 'function')) {
+    initPlayer();
+    return;
+  }
+  // Sinon, on attend le signal (déjà défini plus haut) et on init au moment où le SDK est prêt
+  window.onSpotifyWebPlaybackSDKReady = function(){
+    window._sdkReady = true;
+    initPlayer();
   };
 };
 
