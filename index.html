@@ -145,6 +145,7 @@ document.getElementById('btnAuth').onclick = async () => {
 })();
 
 // ====== Web Playback SDK : initialisation robuste ======
+
 function initPlayer() {
   if (!accessToken) {
     document.getElementById('error').textContent = "Authentifie-toi d'abord.";
@@ -154,7 +155,12 @@ function initPlayer() {
     if (window.Spotify && typeof window.Spotify.Player === 'function') {
       player = new Spotify.Player({
         name: 'Lecteur Web (GitHub Pages)',
-        getOAuthToken: cb => cb(accessToken),
+        getOAuthToken: cb => {
+          // ÉTAPE A — LOGS pour confirmer que le SDK reçoit bien TON token
+          console.log('SDK getOAuthToken — accessToken présent ?', !!accessToken);
+          console.log('SDK getOAuthToken — token (début) =', accessToken ? accessToken.slice(0, 12) : '(null)');
+          cb(accessToken);
+        },
         volume: 0.8
       });
 
@@ -182,6 +188,7 @@ function initPlayer() {
     document.getElementById('error').textContent = 'Exception init: ' + (e && e.message ? e.message : e);
   }
 }
+
 
 document.getElementById('btnInit').onclick = () => {
   if (window._sdkReady || (window.Spotify && typeof window.Spotify.Player === 'function')) {
