@@ -87,17 +87,6 @@ function randomString(len=64){
 }
 
   
-/ ====== Scopes requis (complétés) ======
-// Ajoute les deux scopes manquants : user-read-playback-state, user-read-currently-playing
-const SCOPES = [
-  'streaming',                 // indispensable pour le Web Playback SDK
-  'user-modify-playback-state',// pour play/pause/seek/transfer
-  'user-read-playback-state',  // lire l’état du player (devices, playback)
-  'user-read-currently-playing'// lire le contenu en cours de lecture
-  // 'user-read-private' (facultatif — gardez-le si vous l’utilisez pour autre chose)
-];
-
-
 // ====== OAuth: authorize ======
 document.getElementById('btnAuth').onclick = async () => {
   const verifier = randomString(64);
