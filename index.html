@@ -121,7 +121,7 @@ document.getElementById('btnAuth').onclick = async () => {
 
 // ====== Web Playback SDK ======
 document.getElementById('btnInit').onclick = () => {
-  if (!accessToken) { document.getElementById('error').textContent = 'Authentifie-toi d'abord.'; return; }
+  if (!accessToken) { document.getElementById('error').textContent = 'Authentifie-toi avant.'; return; }
   window.onSpotifyWebPlaybackSDKReady = () => {
     player = new Spotify.Player({ name: 'Lecteur Web (GitHub Pages)', getOAuthToken: cb => cb(accessToken), volume: 0.8 });
     player.addListener('ready', ({ device_id }) => { deviceId = device_id; document.getElementById('status').textContent = 'Lecteur prêt.'; });
@@ -134,7 +134,7 @@ document.getElementById('btnInit').onclick = () => {
 
 // ====== Transfer playback ======
 document.getElementById('btnTransfer').onclick = async () => {
-  if (!accessToken || !deviceId) { document.getElementById('error').textContent = 'Initialise le lecteur web d'abord.'; return; }
+  if (!accessToken || !deviceId) { document.getElementById('error').textContent = 'Initialise le lecteur web avant.'; return; }
   const res = await fetch('https://api.spotify.com/v1/me/player', {
     method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ device_ids: [deviceId], play: false })
