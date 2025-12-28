@@ -64,10 +64,13 @@ label { margin-left: 1rem; }
 const CLIENT_ID = '1d3b46cc1be34f21a8922d6181460d45';
 const REDIRECT_URI = 'https://octetsluc.github.io/trouverlachanson/';
 const SCOPES = [
-  'streaming',
-  'user-modify-playback-state',
-  'user-read-private'
+  'streaming',                 // indispensable pour le Web Playback SDK
+  'user-modify-playback-state',// pour play/pause/seek/transfer
+  'user-read-playback-state',  // lire l’état du player (devices, playback)
+  'user-read-currently-playing'// lire le contenu en cours de lecture
+  // 'user-read-private' (facultatif — gardez-le si vous l’utilisez pour autre chose)
 ];
+
 
 // ====== STATE ======
 let accessToken = null, deviceId = null, player = null;
