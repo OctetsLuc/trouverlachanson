@@ -1,7 +1,0 @@
-# depuis le dépôt local trouverlachanson
-git pull
-# place le index.html à la racine
-git add index.html
-git commit -m "Ajout de l'app Web Playback (timestamp) + OAuth PKCE"
-git push origin main
-``
