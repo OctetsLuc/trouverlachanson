@@ -1,313 +1,224 @@
-
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <title>Trouver la chanson – Jouer le refrain</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- SDK Spotify Web Playback -->
-  https://sdk.scdn.co/spotify-player.js</script>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 2rem; line-height: 1.5; }
-    button { margin: .25rem .5rem .25rem 0; padding: .6rem 1rem; }
-    .row { margin: .5rem 0; }
-    .status { margin-top: 1rem; color: #333; }
-    .small { font-size: .9rem; color: #555; }
-    .checkbox { margin-left: .75rem; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trouver la chanson – Jouer le refrain</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 2rem; }
+button { padding: .8rem 1rem; margin: .5rem 0; font-size: 1rem; cursor: pointer; }
+.track { margin: 1rem 0; }
+#status { margin-top: 1rem; color: #0b6; }
+#error { margin-top: .5rem; color: #c00; white-space: pre-wrap; }
+.container { max-width: 900px; margin: auto; }
+header { margin-bottom: 1rem; }
+label { margin-left: 1rem; }
+</style>
 </head>
 <body>
+<div class="container">
+<header>
   <h1>Trouver la chanson – Jouer le refrain</h1>
-  <p class="small">
-    Connecte‑toi à Spotify, initialise le lecteur web, puis clique sur un titre pour démarrer directement au début du refrain.
-    Active l’option pour répéter le refrain en boucle.
-  </p>
+  <p>Connecte-toi à Spotify, initialise le lecteur web, puis clique sur un titre pour démarrer directement au début du refrain. Active l’option pour répéter le refrain en boucle.</p>
+</header>
 
-  <div class="row">
-    <button id="btnLogin">Connecter Spotify</button>
-    <button id="btnInit">Initialiser le lecteur web</button>
-    <button id="btnTransfer">Transférer vers le navigateur</button>
-    <label class="checkbox"><input type="checkbox" id="chkLoop" /> Répéter le refrain</label>
-    <button id="btnStopLoop">Arrêter la répétition</button>
-    <button id="btnReset">Réinitialiser l’auth</button>
-  </div>
+<!-- Contrôles -->
+<button id="btnAuth">Connecter Spotify</button>
+<button id="btnInit">Initialiser le lecteur web</button>
+<button id="btnTransfer">Transférer vers le navigateur</button>
+<label><input type="checkbox" id="chkRepeat" /> Répéter le refrain</label>
+<button id="btnStopLoop">Arrêter la répétition</button>
 
-  <div class="status" id="status">⏳ Non connecté</div>
-  <hr />
+<div id="status"></div>
+<div id="error"></div>
 
-  <div id="tracks">
-    <div class="row">
-      <strong>Huey Lewis &amp; The News — The Power of Love</strong>
-      <button class="play" data-uri="spotify:track:0xYyF6WcAqkS3YDN1GJLEo" data-start="60000" data-end="90000">
-        Jouer le refrain (1:00 → 1:30)
-      </button>
-    </div>
-    <div class="row">
-      <strong>Bee Gees — Stayin’ Alive</strong>
-      <button class="play" data-uri="spotify:track:4MvVAsHqOQp0v1Z2n3wN2N" data-start="45000" data-end="72000">
-        Jouer le refrain (0:45 → 1:12)
-      </button>
-    </div>
-  </div>
+<hr />
 
-  <script type="module">
-    // -----------------------------
-    // CONFIG
-    // -----------------------------
-    const CLIENT_ID = 'TON_CLIENT_ID_SPOTIFY'; // <<<<<< Remplace par ton Client ID
-    const REDIRECT_URI = 'https://octetluc.github.io/trouverlachanson/'; // GitHub Pages
-    const SCOPES = [
-      'streaming',
-      'user-read-playback-state',
-      'user-modify-playback-state',
-      'user-read-currently-playing'
-    ]; // Scopes requis pour Web Playback SDK et Player API (lecture, seek, transfer)  [1](https://developer.spotify.com/documentation/web-api/concepts/scopes)
+<!-- Exemples de chansons -->
+<div class="track">
+  <strong>Huey Lewis &amp; The News — The Power of Love</strong>
+  <button class="play-refrain"
+    data-uri="spotify:track:0aU29D6g6dR1s6QdWQKcYb"
+    data-ms="60000"
+    data-end-ms="90000">Jouer le refrain (1:00 → 1:30)</button>
+</div>
 
-    // -----------------------------
-    // UTIL PKCE
-    // -----------------------------
-    function base64urlencode(arrayBuffer) {
-      return btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-    async function sha256(str) {
-      const data = new TextEncoder().encode(str);
-      const digest = await crypto.subtle.digest('SHA-256', data);
-      return base64urlencode(digest);
-    }
+<div class="track">
+  <strong>Bee Gees — Stayin’ Alive</strong>
+  <button class="play-refrain"
+    data-uri="spotify:track:0e3FtJfGJY5JrZ3HcTnK2P"
+    data-ms="45000"
+    data-end-ms="72000">Jouer le refrain (0:45 → 1:12)</button>
+</div>
 
-    let codeVerifier = localStorage.getItem('spotify_code_verifier') || null;
-    let accessToken = null;
-    let player = null;
-    let deviceId = null;
+<!-- Callback défini AVANT le SDK -->
+<script>
+  window.onSpotifyWebPlaybackSDKReady = function(){
+    window._sdkReady = true;
+    console.log('SDK Spotify prêt');
+  };
+</script>
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script>
+// ====== CONFIG ======
+const CLIENT_ID = '1d3b46cc1be34f21a8922d6181460d45';
+const REDIRECT_URI = 'https://octetsluc.github.io/trouverlachanson/';
+const SCOPES = [
+  'streaming',
+  'user-modify-playback-state',
+  'user-read-private'
+];
 
-    const statusEl = document.getElementById('status');
-    const chkLoop = document.getElementById('chkLoop');
+// ====== STATE ======
+let accessToken = null, deviceId = null, player = null;
+let loopTimer = null, loopActive = false;
 
-    const loopState = { enabled: false, start: 0, end: 0, interval: null };
+// ====== PKCE helpers ======
+async function pkceChallengeFromVerifier(v) {
+  const data = new TextEncoder().encode(v);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function randomString(len=64){
+  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let out=''; for(let i=0;i<len;i++) out+=chars[Math.floor(Math.random()*chars.length)];
+  return out;
+}
 
-    // -----------------------------
-    // AUTH: démarrer l’autorisation (PKCE)
-    // -----------------------------
-    async function startLogin() {
-      // Génère un code verifier
-      codeVerifier = [...crypto.getRandomValues(new Uint8Array(64))]
-        .map(b => ('0' + (b & 0xff).toString(16)).slice(-2)).join('');
-      localStorage.setItem('spotify_code_verifier', codeVerifier);
+// ====== OAuth: authorize ======
+document.getElementById('btnAuth').onclick = async () => {
+  const verifier = randomString(64);
+  const challenge = await pkceChallengeFromVerifier(verifier);
+  sessionStorage.setItem('verifier', verifier);
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: REDIRECT_URI,
+    code_challenge_method: 'S256',
+    code_challenge: challenge,
+    scope: SCOPES.join(' ')
+  });
+  const url = 'https://accounts.spotify.com/authorize?' + params.toString();
+  console.log('Authorize URL =', url);
+  location.href = url;
+};
 
-      const codeChallenge = await sha256(codeVerifier);
-      const params = new URLSearchParams({
-        client_id: CLIENT_ID,
-        response_type: 'code',
-        redirect_uri: REDIRECT_URI,
-        code_challenge_method: 'S256',
-        code_challenge: codeChallenge,
-        scope: SCOPES.join(' ')
-      });
+// ====== Handle callback (racine /trouverlachanson/) ======
+(async function handleCallback(){
+  const params = new URLSearchParams(location.search);
+  const hasCode = params.has('code');
+  const onRoot = location.pathname.endsWith('/trouverlachanson/') || location.pathname.endsWith('/trouverlachanson');
 
-      // Redirection vers Spotify Accounts
-      window.location = `https://accounts.spotify.com/authorize?${params.toString()}`;  [2](https://developer.spotify.com/documentation/web-api/concepts/authorization)
-    }
+  if (hasCode && onRoot) {
+    const code = params.get('code');
+    const verifier = sessionStorage.getItem('verifier');
+    if (!code || !verifier) { document.getElementById('error').textContent = "Code/verifier manquants."; return; }
 
-    // Échange code -> token
-    async function handleCallbackAndGetToken() {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
-      if (!code) return;
+    const body = new URLSearchParams({
+      client_id: CLIENT_ID,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: verifier
+    });
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body
+    });
+    const json = await res.json();
+    console.log('Token scopes =', json.scope);
+    console.log('Token type =', json.token_type, 'expires_in =', json.expires_in);
+    if (json.error) { document.getElementById('error').textContent = 'Token error: ' + JSON.stringify(json); return; }
+    accessToken = json.access_token;
+    document.getElementById('status').textContent = 'Connecté à Spotify.';
+    history.replaceState({}, '', '/trouverlachanson/');
+  }
+})();
 
-      const body = new URLSearchParams({
-        client_id: CLIENT_ID,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-        code_verifier: codeVerifier
-      });
-
-      const res = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
-      });
-
-      if (!res.ok) {
-        statusEl.textContent = '❌ Échec de l’obtention du token.';
-        return;
-      }
-      const data = await res.json();
-      accessToken = data.access_token;
-      // Nettoie le paramètre ?code= dans l’URL
-      history.replaceState({}, document.title, REDIRECT_URI);
-      statusEl.textContent = '✅ Connecté à Spotify';
-    }
-
-    // -----------------------------
-    // WEB PLAYBACK SDK
-    // -----------------------------
-    window.onSpotifyWebPlaybackSDKReady = () => {
-      // Le SDK est chargé, l'init se fait via btnInit (évite l'init auto sans token)
-    };
-
-    async function initWebPlayer() {
-      if (!accessToken) {
-        statusEl.textContent = '🙃 Connecte-toi d’abord à Spotify.';
-        return;
-      }
-
+// ====== Web Playback SDK : initialisation robuste ======
+function initPlayer() {
+  if (!accessToken) {
+    document.getElementById('error').textContent = "Authentifie-toi d'abord.";
+    return;
+  }
+  try {
+    if (window.Spotify && typeof window.Spotify.Player === 'function') {
       player = new Spotify.Player({
-        name: 'Lecteur Web – Jeu du refrain',
+        name: 'Lecteur Web (GitHub Pages)',
         getOAuthToken: cb => cb(accessToken),
         volume: 0.8
       });
 
-      // Écouteurs d’état/erreurs
       player.addListener('ready', ({ device_id }) => {
         deviceId = device_id;
-        statusEl.textContent = `🎧 Lecteur prêt (device_id: ${device_id})`;
-      });
-
-      player.addListener('not_ready', ({ device_id }) => {
-        statusEl.textContent = `⚠️ Lecteur non prêt (device_id: ${device_id})`;
+        document.getElementById('status').textContent = 'Lecteur prêt.';
       });
 
       player.addListener('initialization_error', ({ message }) => {
-        console.error('initialization_error', message);
-        statusEl.textContent = `❌ Init error: ${message}`;
+        document.getElementById('error').textContent = 'Init error: ' + message;
       });
       player.addListener('authentication_error', ({ message }) => {
-        console.error('authentication_error', message);
-        statusEl.textContent = `❌ Auth error: ${message}`;
+        document.getElementById('error').textContent = 'Auth error: ' + message;
       });
       player.addListener('account_error', ({ message }) => {
-        console.error('account_error', message);
-        statusEl.textContent = `❌ Account error: ${message}`;
+        document.getElementById('error').textContent = 'Account error: ' + message;
       });
 
-      const ok = await player.connect();
-      statusEl.textContent = ok
-        ? '✅ Web Playback SDK connecté à Spotify'
-        : '❌ Échec de connexion au Web Playback SDK';
+      player.connect();
+    } else {
+      document.getElementById('error').textContent =
+        'SDK Spotify non chargé. Réessaie (Ctrl+F5) ou vérifie le script https://sdk.scdn.co/spotify-player.js.';
     }
+  } catch (e) {
+    document.getElementById('error').textContent = 'Exception init: ' + (e && e.message ? e.message : e);
+  }
+}
 
-    // Active l’élément audio si l’autoplay est bloqué (utile iOS/Chrome)  [3](https://developer.spotify.com/documentation/web-playback-sdk)
-    async function activateForAutoplay() {
-      if (player && player.activateElement) {
-        await player.activateElement();
-      }
-    }
+document.getElementById('btnInit').onclick = () => {
+  if (window._sdkReady || (window.Spotify && typeof window.Spotify.Player === 'function')) {
+    initPlayer();
+    return;
+  }
+  window.onSpotifyWebPlaybackSDKReady = function(){
+    window._sdkReady = true;
+    initPlayer();
+  };
+};
 
-    // -----------------------------
-    // TRANSFERT VERS LE NAVIGATEUR
-    // -----------------------------
-    async function transferToWebDevice() {
-      if (!accessToken || !deviceId) {
-        statusEl.textContent = '🙃 Initialise le lecteur web avant le transfert.';
-        return;
-      }
-      await activateForAutoplay();
+// ====== Transfer playback ======
+document.getElementById('btnTransfer').onclick = async () => {
+  if (!accessToken || !deviceId) { document.getElementById('error').textContent = "Initialise le lecteur web d'abord."; return; }
+  const res = await fetch('https://api.spotify.com/v1/me/player', {
+    method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_ids: [deviceId], play: false })
+  });
+  if (res.status === 204) { document.getElementById('status').textContent = 'Lecture transférée vers le navigateur.'; }
+};
 
-      const res = await fetch('https://api.spotify.com/v1/me/player', {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ device_ids: [deviceId], play: true })
-      });
+// ====== Loop helpers ======
+function stopLoop(){ loopActive=false; if(loopTimer){ clearTimeout(loopTimer); loopTimer=null; } document.getElementById('status').textContent='Répétition arrêtée.'; }
+document.getElementById('btnStopLoop').onclick = stopLoop;
 
-      statusEl.textContent = (res.status === 204)
-        ? '🔁 Lecture transférée vers le navigateur'
-        : `⚠️ Transfert: ${res.status}`;
-    }  <!-- [4](https://developer.spotify.com/documentation/web-api/reference/transfer-a-users-playback) -->
+async function seekTo(ms){
+  const res = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${ms}`, { method: 'PUT', headers: { Authorization: `Bearer ${accessToken}` } });
+  if (res.status !== 204) { const txt = await res.text(); document.getElementById('error').textContent = 'Erreur seek: ' + txt; }
+}
+function scheduleLoop(startMs,endMs){ if(!loopActive) return; const FUDGE=250; const duration=Math.max(300,(endMs-startMs)-FUDGE); loopTimer=setTimeout(async()=>{ if(!loopActive) return; await seekTo(startMs); scheduleLoop(startMs,endMs); }, duration); }
 
-    // -----------------------------
-    // LECTURE D’UN SEGMENT (start_ms → end_ms) + BOUCLE
-    // -----------------------------
-    async function playSegment(trackUri, startMs, endMs) {
-      if (!accessToken || !deviceId) {
-        statusEl.textContent = '🙃 Initialise et transfère vers le navigateur avant de jouer.';
-        return;
-      }
+async function playRefrainLoop(uri,startMs,endMs){
+  stopLoop();
+  const res = await fetch('https://api.spotify.com/v1/me/player/play', {
+    method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uris: [uri], position_ms: startMs })
+  });
+  if (res.status !== 204) { const txt = await res.text(); document.getElementById('error').textContent = 'Erreur play: ' + txt; return; }
+  loopActive = document.getElementById('chkRepeat').checked; if (loopActive){ scheduleLoop(startMs,endMs); document.getElementById('status').textContent='Lecture + répétition activée.'; }
+}
 
-      // Démarre la piste directement à start_ms (position_ms en snake_case)
-      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uris: [trackUri], position_ms: startMs })
-      });  <!-- [5](https://developer.spotify.com/documentation/web-api/reference/seek-to-position-in-currently-playing-track) -->
-
-      // Configure la boucle
-      clearInterval(loopState.interval);
-      loopState.start = startMs;
-      loopState.end = endMs;
-      loopState.enabled = chkLoop.checked;
-
-      const tick = async () => {
-        const state = await player.getCurrentState();
-        if (!state || typeof state.position !== 'number') return;
-
-        const pos = state.position;
-        if (loopState.enabled && pos >= loopState.end) {
-          // Seek au début du segment
-          await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${loopState.start}&device_id=${encodeURIComponent(deviceId)}`, {
-            method: 'PUT',
-            headers: { Authorization: `Bearer ${accessToken}` }
-          });  <!-- [5](https://developer.spotify.com/documentation/web-api/reference/seek-to-position-in-currently-playing-track) -->
-        }
-      };
-
-      loopState.interval = setInterval(tick, 100);
-      statusEl.textContent = `▶️ Segment ${msToClock(startMs)} → ${msToClock(endMs)} (boucle ${loopState.enabled ? 'ON' : 'OFF'})`;
-    }
-
-    function msToClock(ms) {
-      const s = Math.floor(ms / 1000);
-      return `${String(Math.floor(s / 60)).padStart(1, '0')}:${String(s % 60).padStart(2, '0')}`;
-    }
-
-    function stopLoop() {
-      loopState.enabled = false;
-      chkLoop.checked = false;
-      clearInterval(loopState.interval);
-      statusEl.textContent = '⛔ Répétition arrêtée';
-    }
-
-    // -----------------------------
-    // RESET AUTH (force une réauth propre)
-    // -----------------------------
-    function resetAuth() {
-      localStorage.removeItem('spotify_code_verifier');
-      location.href = REDIRECT_URI;
-    }
-
-    // -----------------------------
-    // WIRING UI
-    // -----------------------------
-    document.getElementById('btnLogin').addEventListener('click', startLogin);
-    document.getElementById('btnInit').addEventListener('click', initWebPlayer);
-    document.getElementById('btnTransfer').addEventListener('click', transferToWebDevice);
-    document.getElementById('btnStopLoop').addEventListener('click', stopLoop);
-    document.getElementById('btnReset').addEventListener('click', resetAuth);
-    chkLoop.addEventListener('change', () => { loopState.enabled = chkLoop.checked; });
-
-    document.querySelectorAll('button.play').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const uri = btn.dataset.uri;
-        const start = parseInt(btn.dataset.start, 10);
-        const end = parseInt(btn.dataset.end, 10);
-        await playSegment(uri, start, end);
-      });
-    });
-
-    // Si retour OAuth (code dans l’URL), on échange -> token
-    handleCallbackAndGetToken();
-  </script>
-
-  <!--
-    Notes techniques :
-    - Le Web Playback SDK nécessite le scope "streaming" et un compte Premium.  [3](https://developer.spotify.com/documentation/web-playback-sdk)
-    - Transférer la lecture vers le device web : PUT /v1/me/player avec device_ids + play.  [4](https://developer.spotify.com/documentation/web-api/reference/transfer-a-users-playback)
-    - Démarrer à un timestamp précis : PUT /v1/me/player/play avec position_ms ; boucler via PUT /v1/me/player/seek.  [5](https://developer.spotify.com/documentation/web-api/reference/seek-to-position-in-currently-playing-track)
-    - Authorization Code avec PKCE recommandé pour apps web côté navigateur.  [2](https://developer.spotify.com/documentation/web-api/concepts/authorization)
-  -->
+document.querySelectorAll('.play-refrain').forEach(btn => {
+  btn.addEventListener('click', () => { const uri=btn.dataset.uri; const startMs=parseInt(btn.dataset.ms,10); const endMs=parseInt(btn.dataset.endMs,10); playRefrainLoop(uri,startMs,endMs); });
+});
+</script>
+</div>
 </body>
 </html>
