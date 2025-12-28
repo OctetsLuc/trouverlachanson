@@ -51,11 +51,12 @@ label { margin-left: 1rem; }
     data-end-ms="72000">Jouer le refrain (0:45 → 1:12)</button>
 </div>
 
+<!-- SDK Spotify (doit être chargé avant notre script) -->
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script>
 // ====== CONFIG ======
 const CLIENT_ID = '1d3b46cc1be34f21a8922d6181460d45';
-// Redirect URI pour GitHub Pages
+// Redirect URI sur la RACINE (tout en minuscules, slash final)
 const REDIRECT_URI = 'https://octetsluc.github.io/trouverlachanson/';
 const SCOPES = ['user-modify-playback-state','streaming'];
 
@@ -94,12 +95,17 @@ document.getElementById('btnAuth').onclick = async () => {
   location.href = url;
 };
 
-// ====== Handle callback (GitHub Pages) ======
+// ====== Handle callback (racine /trouverlachanson/) ======
 (async function handleCallback(){
-  if (location.pathname.endsWith('/callback')) {
-    const code = new URLSearchParams(location.search).get('code');
+  const params = new URLSearchParams(location.search);
+  const hasCode = params.has('code');
+  const onRoot = location.pathname.endsWith('/trouverlachanson/') || location.pathname.endsWith('/trouverlachanson');
+
+  if (hasCode && onRoot) {
+    const code = params.get('code');
     const verifier = sessionStorage.getItem('verifier');
-    if (!code || !verifier) { document.getElementById('error').textContent='Code/verifier manquants.'; return; }
+    if (!code || !verifier) { document.getElementById('error').textContent = "Code/verifier manquants."; return; }
+
     const body = new URLSearchParams({
       client_id: CLIENT_ID,
       grant_type: 'authorization_code',
@@ -114,14 +120,14 @@ document.getElementById('btnAuth').onclick = async () => {
     if (json.error) { document.getElementById('error').textContent = 'Token error: ' + JSON.stringify(json); return; }
     accessToken = json.access_token;
     document.getElementById('status').textContent = 'Connecté à Spotify.';
-    // Retourne à la racine du site pour éviter de rester sur /callback
+    // Nettoie l'URL (retire ?code=...)
     history.replaceState({}, '', '/trouverlachanson/');
   }
 })();
 
 // ====== Web Playback SDK ======
 document.getElementById('btnInit').onclick = () => {
-  if (!accessToken) { document.getElementById('error').textContent = 'Authentifie-toi avant.'; return; }
+  if (!accessToken) { document.getElementById('error').textContent = "Authentifie-toi d'abord."; return; }
   window.onSpotifyWebPlaybackSDKReady = () => {
     player = new Spotify.Player({ name: 'Lecteur Web (GitHub Pages)', getOAuthToken: cb => cb(accessToken), volume: 0.8 });
     player.addListener('ready', ({ device_id }) => { deviceId = device_id; document.getElementById('status').textContent = 'Lecteur prêt.'; });
@@ -134,7 +140,7 @@ document.getElementById('btnInit').onclick = () => {
 
 // ====== Transfer playback ======
 document.getElementById('btnTransfer').onclick = async () => {
-  if (!accessToken || !deviceId) { document.getElementById('error').textContent = 'Initialise le lecteur web avant.'; return; }
+  if (!accessToken || !deviceId) { document.getElementById('error').textContent = "Initialise le lecteur web d'abord."; return; }
   const res = await fetch('https://api.spotify.com/v1/me/player', {
     method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ device_ids: [deviceId], play: false })
