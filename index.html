@@ -80,6 +80,78 @@
     https://sdk.scdn.co/spotify-player.js</script> 
 
 
+<script>
+  // --- Utilitaires token + démarrage conditionnel du lecteur ---
+  let player = null;
+  let deviceId = null;
+
+  function hasAccessToken() {
+    const t = window.localStorage.getItem('access_token');
+    const exp = parseInt(window.localStorage.getItem('expires_at') || '0', 10);
+    return !!t && Date.now() < (exp - 5000);
+  }
+
+  function startPlayer() {
+    // Évite d'initialiser deux fois
+    if (player) return;
+
+    if (!hasAccessToken()) {
+      log('Pas de token encore — on attend avant d’initialiser le lecteur.');
+      return;
+    }
+
+    setStatus('Initialisation du lecteur…');
+
+    // Crée le lecteur avec récupération du token au moment de l’appel
+    player = new Spotify.Player({
+      name: 'Lecteur Web — Trouver la chanson',
+      getOAuthToken: cb => {
+        const token = window.localStorage.getItem('access_token');
+        if (token) {
+          cb(token);
+        } else {
+          // Petit retry si l’échange vient juste de se terminer
+          log('Token absent — on retente dans 500 ms.');
+          setTimeout(() => {
+            const t2 = window.localStorage.getItem('access_token');
+            if (t2) cb(t2);
+          }, 500);
+        }
+      },
+      volume: 0.8,
+    });
+
+    // Événements
+    player.addListener('ready', ({ device_id }) => {
+      deviceId = device_id;
+      setStatus(`Lecteur prêt (device_id: ${deviceId})`);
+      log('Lecteur prêt. device_id=' + deviceId);
+    });
+
+    player.addListener('not_ready', ({ device_id }) => {
+      setStatus(`Lecteur non prêt (${device_id})`);
+    });
+
+    player.addListener('initialization_error', ({ message }) => {
+      log('Erreur init: ' + message);
+    });
+    player.addListener('authentication_error', ({ message }) => {
+      log('Erreur auth: ' + message);
+    });
+    player.addListener('account_error', ({ message }) => {
+      log('Erreur compte: ' + message);
+    });
+
+    player.connect().then(success => {
+      if (success) {
+        setStatus('Le SDK est connecté à Spotify.');
+      } else {
+        setStatus('Échec de connexion au SDK.');
+      }
+    });
+  }
+</script>
+
 
 <script>
   (function loadSpotifySDK(){
@@ -208,6 +280,7 @@
         window.localStorage.setItem('expires_at', String(Date.now() + (data.expires_in * 1000)));
         $('authState').textContent = 'Connecté (token valide)';
         log('Token obtenu.');
+        startPlayer(); // Démarrer le lecteur maintenant que le token existe
       } else {
         log('Échec de l\'échange du token: ' + JSON.stringify(data));
       }
@@ -395,6 +468,7 @@
         const token = getAccessToken();
         if (token) {
           $('authState').textContent = 'Connecté (session existante)';
+          startPlayer(); // Démarrer le lecteur maintenant que le token existe
         }
       }
     })();
