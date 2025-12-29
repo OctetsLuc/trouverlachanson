@@ -4,20 +4,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lecture Spotify (PKCE + Web Playback SDK)</title>
+  <title>Lecture Spotify (PKCE + Web Playback SDK) — correctifs autoplay</title>
   <style>
+    :root { --green:#1db954; --grey:#666; --err:#b00020; --warn:#b26b00; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif; margin: 2rem; }
     header { display:flex; align-items:center; gap:1rem; }
     code { background:#f6f8fa; padding:0.2rem 0.4rem; border-radius:4px; }
     .row { display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center; }
     input[type=text] { width: 36rem; max-width:100%; padding:0.5rem; }
     button { padding:0.5rem 0.75rem; cursor:pointer; }
+    button.primary { background: var(--green); color:white; border: none; }
+    button[disabled] { opacity: 0.6; cursor: not-allowed; }
     #log { white-space: pre-wrap; background:#fafafa; border:1px solid #ddd; padding:0.75rem; border-radius:6px; min-height:3rem; }
-    .muted { color:#666; }
-    .ok { color:#1db954; font-weight:600; }
-    .warn { color:#b26b00; font-weight:600; }
-    .err { color:#b00020; font-weight:600; }
-    footer { margin-top: 2rem; font-size: 0.9rem; color:#555; }
+    .muted { color: var(--grey); }
+    .ok { color: var(--green); font-weight:600; }
+    .warn { color: var(--warn); font-weight:600; }
+    .err { color: var(--err); font-weight:600; }
+    .hint { font-size: 0.9rem; color:#444; }
   </style>
 </head>
 <body>
@@ -26,17 +29,21 @@
     <span id="premium-info" class="muted">(Compte Premium requis pour la lecture dans le navigateur)</span>
   </header>
 
+  <section class="hint" id="envHint" style="display:none; margin-bottom:0.75rem;"></section>
+
   <section>
     <p>1) Cliquez <strong>Se connecter</strong> pour autoriser l'application.<br />
-       2) Entrez une URL/URI Spotify (ex.: <code>https://open.spotify.com/track/...</code> ou <code>spotify:track:...</code>) et cliquez <strong>Jouer</strong>.</p>
+       2) Cliquez <strong>Activer l’audio</strong> si demandé (utile sur Safari/iOS).<br />
+       3) Entrez une URL/URI Spotify (ex.: <code>https://open.spotify.com/track/...</code> ou <code>spotify:track:...</code>) et cliquez <strong>Jouer</strong>.</p>
     <div class="row">
-      <button id="loginBtn">Se connecter à Spotify</button>
+      <button id="loginBtn" class="primary">Se connecter à Spotify</button>
       <button id="logoutBtn" title="Nettoie les jetons" style="display:none;">Se déconnecter</button>
       <span id="authStatus" class="muted"></span>
     </div>
     <div class="row" style="margin-top:0.75rem;">
       <input id="trackInput" type="text" placeholder="Collez une URL/URI Spotify (p. ex. https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl)" />
-      <button id="playBtn" disabled>Jouer ▶︎</button>
+      <button id="activateBtn" disabled>Activer l’audio 🔊</button>
+      <button id="playBtn" class="primary" disabled>Jouer ▶︎</button>
       <button id="pauseBtn" disabled>Pause ⏸︎</button>
       <button id="resumeBtn" disabled>Reprendre ⏵︎</button>
     </div>
@@ -50,7 +57,7 @@
   </section>
 
   <!-- SDK Spotify -->
-  https://sdk.scdn.co/spotify-player.js</script>
+  <script src="https://potify-player.js</script>
 
   <script>
     // === Paramètres fournis par Luc ===
@@ -58,10 +65,6 @@
     const REDIRECT_URI = 'https://octetsluc.github.io/trouverlachanson/';
 
     // === Scopes nécessaires ===
-    // - streaming: pour Web Playback SDK
-    // - user-modify-playback-state: contrôler la lecture
-    // - user-read-playback-state: obtenir l'état/appareils
-    // - user-read-email & user-read-private: souvent recommandés
     const SCOPES = [
       'streaming',
       'user-modify-playback-state',
@@ -79,11 +82,13 @@
       logoutBtn: document.getElementById('logoutBtn'),
       authStatus: document.getElementById('authStatus'),
       trackInput: document.getElementById('trackInput'),
+      activateBtn: document.getElementById('activateBtn'),
       playBtn: document.getElementById('playBtn'),
       pauseBtn: document.getElementById('pauseBtn'),
       resumeBtn: document.getElementById('resumeBtn'),
       deviceInfo: document.getElementById('deviceInfo'),
-      log: document.getElementById('log')
+      log: document.getElementById('log'),
+      envHint: document.getElementById('envHint')
     };
 
     let accessToken = null; // jeton d'accès OAuth
@@ -91,6 +96,15 @@
     let tokenExpiresAt = 0; // ms epoch
     let player = null; // instance Web Playback SDK
     let deviceId = null; // id de l'appareil navigateur
+
+    // === Détection plateforme (pour messages/autoplay) ===
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+    if (isIOS || isSafari) {
+      els.envHint.style.display = 'block';
+      els.envHint.textContent = 'Safari/iOS: l’autoplay est bloqué. Cliquez « Activer l’audio » avant de lancer la lecture.';
+    }
 
     function log(msg, cls) {
       const p = document.createElement('div');
@@ -108,34 +122,22 @@
       crypto.getRandomValues(values);
       return Array.from(values).map(x => possible[x % possible.length]).join('');
     }
-
-    async function sha256(plain) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(plain);
-      return await window.crypto.subtle.digest('SHA-256', data);
-    }
-
-    function base64url(arrayBuffer) {
-      const bytes = new Uint8Array(arrayBuffer);
+    async function sha256(plain) { return await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain)); }
+    function base64url(buffer) {
+      const bytes = new Uint8Array(buffer);
       let binary = '';
       bytes.forEach(b => binary += String.fromCharCode(b));
-      return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      return btoa(binary).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
     }
-
-    async function pkceChallengeFromVerifier(verifier) {
-      const hashed = await sha256(verifier);
-      return base64url(hashed);
-    }
+    async function pkceChallengeFromVerifier(verifier) { return base64url(await sha256(verifier)); }
 
     // === Connexion OAuth (Code + PKCE) ===
     async function login() {
       const state = generateRandomString(16);
       const codeVerifier = generateRandomString(64);
       const codeChallenge = await pkceChallengeFromVerifier(codeVerifier);
-
       sessionStorage.setItem('pkce_verifier', codeVerifier);
       sessionStorage.setItem('pkce_state', state);
-
       const params = new URLSearchParams({
         client_id: CLIENT_ID,
         response_type: 'code',
@@ -145,17 +147,12 @@
         state,
         scope: SCOPES.join(' ')
       });
-      const url = AUTH_URL + '?' + params.toString();
-      window.location.assign(url);
+      window.location.assign(AUTH_URL + '?' + params.toString());
     }
 
     async function exchangeToken(code) {
       const verifier = sessionStorage.getItem('pkce_verifier');
-      if (!verifier) {
-        log('Code verifier PKCE introuvable. Veuillez relancer la connexion.', 'err');
-        return;
-      }
-      // Construction du corps x-www-form-urlencoded
+      if (!verifier) { log('Code verifier PKCE introuvable. Veuillez relancer la connexion.', 'err'); return; }
       const body = new URLSearchParams({
         client_id: CLIENT_ID,
         grant_type: 'authorization_code',
@@ -163,72 +160,47 @@
         redirect_uri: REDIRECT_URI,
         code_verifier: verifier
       });
-      const resp = await fetch(TOKEN_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
-      });
-      if (!resp.ok) {
-        const errText = await resp.text();
-        log('Échec de l\'échange du code: ' + errText, 'err');
-        throw new Error('Token exchange failed');
-      }
+      const resp = await fetch(TOKEN_URL, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body });
+      if (!resp.ok) { log('Échec de l\'échange du code: ' + (await resp.text()), 'err'); throw new Error('Token exchange failed'); }
       const data = await resp.json();
-      accessToken = data.access_token;
-      refreshToken = data.refresh_token || null;
-      tokenExpiresAt = Date.now() + (data.expires_in || 3600) * 1000;
-      sessionStorage.setItem('access_token', accessToken);
-      if (refreshToken) sessionStorage.setItem('refresh_token', refreshToken);
-      sessionStorage.removeItem('pkce_verifier');
-      sessionStorage.removeItem('pkce_state');
-      els.authStatus.textContent = 'Connecté';
-      els.logoutBtn.style.display = 'inline-block';
+      accessToken = data.access_token; refreshToken = data.refresh_token || null; tokenExpiresAt = Date.now() + (data.expires_in || 3600) * 1000;
+      sessionStorage.setItem('access_token', accessToken); if (refreshToken) sessionStorage.setItem('refresh_token', refreshToken);
+      sessionStorage.removeItem('pkce_verifier'); sessionStorage.removeItem('pkce_state');
+      els.authStatus.textContent = 'Connecté'; els.logoutBtn.style.display = 'inline-block';
       log('Authentification réussie.', 'ok');
     }
 
     function restoreTokensFromStorage() {
       const t = sessionStorage.getItem('access_token');
-      if (t) {
-        accessToken = t;
-        els.authStatus.textContent = 'Connecté';
-        els.logoutBtn.style.display = 'inline-block';
-        return true;
-      }
+      if (t) { accessToken = t; els.authStatus.textContent = 'Connecté'; els.logoutBtn.style.display = 'inline-block'; return true; }
       return false;
     }
 
     function logout() {
       accessToken = null; refreshToken = null; tokenExpiresAt = 0;
-      sessionStorage.removeItem('access_token');
-      sessionStorage.removeItem('refresh_token');
-      els.authStatus.textContent = '';
-      els.logoutBtn.style.display = 'none';
-      els.playBtn.disabled = true; els.pauseBtn.disabled = true; els.resumeBtn.disabled = true;
+      sessionStorage.removeItem('access_token'); sessionStorage.removeItem('refresh_token');
+      els.authStatus.textContent = ''; els.logoutBtn.style.display = 'none';
+      els.playBtn.disabled = true; els.pauseBtn.disabled = true; els.resumeBtn.disabled = true; els.activateBtn.disabled = true;
       log('Jetons nettoyés côté client.', 'warn');
     }
 
     // === Initialisation du lecteur Web Playback SDK ===
     function initPlayer() {
-      if (!accessToken) {
-        log('Aucun jeton d\'accès. Connectez-vous d\'abord.', 'warn');
+      if (!accessToken) { log('Aucun jeton d\'accès. Connectez-vous d\'abord.', 'warn'); return; }
+      if (!window.Spotify || !window.Spotify.Player) {
+        log('SDK Spotify non chargé (extensions/bloqueur ?). Essayez de désactiver les bloqueurs et rechargez.', 'err');
         return;
       }
       window.onSpotifyWebPlaybackSDKReady = () => {
-        player = new Spotify.Player({
-          name: 'Lecteur navigateur (Luc)',
-          getOAuthToken: cb => cb(accessToken),
-          volume: 0.5
-        });
+        player = new Spotify.Player({ name: 'Lecteur navigateur (Luc)', getOAuthToken: cb => cb(accessToken), volume: 0.5 });
 
         player.addListener('ready', ({ device_id }) => {
           deviceId = device_id;
           els.deviceInfo.textContent = 'Appareil navigateur: ' + device_id;
-          els.playBtn.disabled = false; els.pauseBtn.disabled = false; els.resumeBtn.disabled = false;
+          els.activateBtn.disabled = false; els.playBtn.disabled = false; els.pauseBtn.disabled = false; els.resumeBtn.disabled = false;
           log('Lecteur prêt. Device ID: ' + device_id, 'ok');
         });
-        player.addListener('not_ready', ({ device_id }) => {
-          log('Appareil hors ligne: ' + device_id, 'warn');
-        });
+        player.addListener('not_ready', ({ device_id }) => { log('Appareil hors ligne: ' + device_id, 'warn'); });
         player.addListener('initialization_error', ({ message }) => log('Erreur init: ' + message, 'err'));
         player.addListener('authentication_error', ({ message }) => log('Erreur auth SDK: ' + message, 'err'));
         player.addListener('account_error', ({ message }) => log('Erreur compte (Premium requis ?): ' + message, 'err'));
@@ -241,21 +213,21 @@
     function toSpotifyURI(input) {
       if (!input) return null;
       const trimmed = input.trim();
-      if (trimmed.startsWith('spotify:')) {
-        return { type: trimmed.split(':')[1], uri: trimmed };
-      }
+      if (trimmed.startsWith('spotify:')) { return { type: trimmed.split(':')[1], uri: trimmed }; }
       try {
         const u = new URL(trimmed);
         if (u.hostname.includes('open.spotify.com')) {
           const parts = u.pathname.split('/').filter(Boolean); // ["track", "id"]
-          const type = parts[0];
-          const id = parts[1]?.split('?')[0];
-          if (type && id) {
-            return { type, uri: `spotify:${type}:${id}` };
-          }
+          const type = parts[0]; const id = parts[1]?.split('?')[0];
+          if (type && id) { return { type, uri: `spotify:${type}:${id}` }; }
         }
-      } catch (_) {}
+      } catch(_){}
       return null;
+    }
+
+    async function ensureActivation() {
+      try { if (player && player.activateElement) { await player.activateElement(); log('Audio activé (interaction utilisateur).', 'ok'); } }
+      catch(e){ log('Activation audio refusée: ' + (e?.message || e), 'warn'); }
     }
 
     async function playInput() {
@@ -264,31 +236,24 @@
       const parsed = toSpotifyURI(els.trackInput.value);
       if (!parsed) { log('Entrez une URL/URI Spotify valide.', 'warn'); return; }
 
+      // Safari/iOS et certains Chrome: activation requise avant lecture
+      await ensureActivation();
+
       const url = new URL('https://api.spotify.com/v1/me/player/play');
       url.searchParams.set('device_id', deviceId);
-
-      const body = (parsed.type === 'track')
-        ? { uris: [ parsed.uri ] }
-        : { context_uri: parsed.uri };
+      const body = (parsed.type === 'track') ? { uris: [ parsed.uri ] } : { context_uri: parsed.uri };
 
       const resp = await fetch(url.toString(), {
         method: 'PUT',
-        headers: {
-          'Authorization': 'Bearer ' + accessToken,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
 
-      if (resp.status === 204) {
-        log('Lecture démarrée: ' + parsed.uri, 'ok');
-      } else {
-        let txt = await resp.text();
-        if (resp.status === 403 && txt.includes('PREMIUM_REQUIRED')) {
-          log('Lecture refusée: compte Premium requis pour les commandes de lecture.', 'err');
-        } else {
-          log('Échec lecture (' + resp.status + '): ' + txt, 'err');
-        }
+      if (resp.status === 204) { log('Lecture démarrée: ' + parsed.uri, 'ok'); }
+      else {
+        const txt = await resp.text();
+        if (resp.status === 403 && txt.includes('PREMIUM_REQUIRED')) { log('Lecture refusée: compte Premium requis pour les commandes de lecture.', 'err'); }
+        else { log('Échec lecture (' + resp.status + '): ' + txt, 'err'); }
       }
     }
 
@@ -298,7 +263,6 @@
       const resp = await fetch(url, { method: 'PUT', headers: { 'Authorization': 'Bearer ' + accessToken } });
       log(resp.status === 204 ? 'Lecture mise en pause.' : 'Pause: ' + resp.status, resp.status === 204 ? 'ok' : 'warn');
     }
-
     async function resume() {
       if (!accessToken) return;
       const url = 'https://api.spotify.com/v1/me/player/play?device_id=' + encodeURIComponent(deviceId || '');
@@ -309,38 +273,25 @@
     // === Wiring UI ===
     els.loginBtn.addEventListener('click', login);
     els.logoutBtn.addEventListener('click', logout);
+    els.activateBtn.addEventListener('click', ensureActivation);
     els.playBtn.addEventListener('click', playInput);
     els.pauseBtn.addEventListener('click', pause);
     els.resumeBtn.addEventListener('click', resume);
 
     // === Au chargement: traiter le callback OAuth ===
     (async function init() {
-      // Restaurer jeton si déjà dans storage
       const hadToken = restoreTokensFromStorage();
-
-      // Si retour d'auth avec code
       const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const stateReturned = params.get('state');
+      const code = params.get('code'); const stateReturned = params.get('state');
       if (code) {
         try {
           const expectedState = sessionStorage.getItem('pkce_state');
-          if (!expectedState || expectedState !== stateReturned) {
-            log('État OAuth inattendu. Opération annulée pour sécurité.', 'err');
-          } else {
-            await exchangeToken(code);
-            // Nettoyer la barre d'adresse
-            history.replaceState({}, document.title, REDIRECT_URI);
-          }
+          if (!expectedState || expectedState !== stateReturned) { log('État OAuth inattendu. Opération annulée pour sécurité.', 'err'); }
+          else { await exchangeToken(code); history.replaceState({}, document.title, REDIRECT_URI); }
         } catch (e) { console.error(e); }
       }
-
-      // Initialiser le lecteur si on a un jeton
-      if (accessToken || hadToken) {
-        initPlayer();
-      } else {
-        log('Cliquez "Se connecter" pour continuer.', 'muted');
-      }
+      if (accessToken || hadToken) { initPlayer(); }
+      else { log('Cliquez "Se connecter" pour continuer.', 'muted'); }
     })();
   </script>
 </body>
