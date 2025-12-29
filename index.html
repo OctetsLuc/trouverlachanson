@@ -79,6 +79,25 @@
     <!-- SDK du lecteur Spotify -->
     https://sdk.scdn.co/spotify-player.js</script> 
 
+
+
+<script>
+  (function loadSpotifySDK(){
+    var s = document.createElement('script');
+    s.src = 'https://sdk.scdn.co/spotify-player.js';
+    s.async = true;
+    s.onload = function() {
+      console.log('SDK chargé.');
+    };
+    s.onerror = function() {
+      console.error('Échec de chargement du SDK Spotify.');
+    };
+    document.head.appendChild(s);
+  })();
+</script>
+
+
+  
       
   <script>
     // === Paramètres Spotify ===
