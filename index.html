@@ -82,8 +82,8 @@
 
 <script>
   // --- Utilitaires token + démarrage conditionnel du lecteur ---
-  window.player   = (typeof window.player   !== 'undefined') ? window.player   : null;
-  window.deviceId = (typeof window.deviceId !== 'undefined') ? window.deviceId : null;
+  let player = null;
+  let deviceId = null;
 
   function hasAccessToken() {
     const t = window.localStorage.getItem('access_token');
@@ -329,8 +329,8 @@
     }
 
     // === Web Playback SDK ===
-    window.player   = (typeof window.player   !== 'undefined') ? window.player   : null;
-    window.deviceId = (typeof window.deviceId !== 'undefined') ? window.deviceId : null;
+    let player = null;
+    let deviceId = null;
 
     window.onSpotifyWebPlaybackSDKReady = () => {
       setStatus('Initialisation du lecteur…');
